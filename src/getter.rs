@@ -576,3 +576,204 @@ impl Getter for JavaCode {
 }
 
 impl Getter for KotlinCode {}
+
+impl Getter for GoCode {
+    fn get_space_kind(node: &Node) -> SpaceKind {
+        use crate::Go::*;
+        match node.kind_id().into() {
+            FunctionDeclaration | MethodDeclaration | FuncLiteral => SpaceKind::Function,
+            SourceFile => SpaceKind::Unit,
+            _ => SpaceKind::Unknown,
+        }
+    }
+
+    fn get_op_type(node: &Node) -> HalsteadType {
+        use crate::Go::*;
+        match node.kind_id().into() {
+            // Operators: keywords and control flow
+            // Note: Go::Go is the `go` keyword for goroutines
+            Func | Go | Defer | Return | If | Else | For | Range | Switch | Select
+            | Case | Default | Break | Continue | Goto | Fallthrough | Chan | Map | Struct
+            | Interface | Type | Var | Const | Package | Import
+            // Operators: punctuation
+            | DOT | COMMA | SEMI | COLON | COLONEQ | EQ
+            | PLUSEQ | DASHEQ | STAREQ | SLASHEQ | PERCENTEQ
+            | AMPEQ | PIPEEQ | CARETEQ | LTLTEQ | GTGTEQ | AMPCARETEQ
+            // Operators: arithmetic/logic
+            | PLUS | DASH | STAR | SLASH | PERCENT | AMP | PIPE | CARET | LTLT | GTGT
+            | AMPAMP | PIPEPIPE | AMPCARET | PLUSPLUS | DASHDASH
+            | EQEQ | BANGEQ | LT | LTEQ | GT | GTEQ | BANG
+            | LPAREN | LBRACK | LBRACE | DOTDOTDOT => HalsteadType::Operator,
+            // Operands
+            Identifier | IntLiteral | FloatLiteral | ImaginaryLiteral | RuneLiteral
+            | RawStringLiteral | InterpretedStringLiteral | True | False | Nil
+            | Iota => HalsteadType::Operand,
+            _ => HalsteadType::Unknown,
+        }
+    }
+
+    get_operator!(Go);
+}
+
+impl Getter for HaskellCode {
+    fn get_space_kind(node: &Node) -> SpaceKind {
+        use crate::Haskell::*;
+        match node.kind_id().into() {
+            Function | Function2 | Bind | Class | ClassDecl | Instance | InstanceDecl => {
+                SpaceKind::Function
+            }
+            Haskell => SpaceKind::Unit,
+            _ => SpaceKind::Unknown,
+        }
+    }
+
+    fn get_op_type(node: &Node) -> HalsteadType {
+        use crate::Haskell::*;
+        match node.kind_id().into() {
+            // Operators: keywords, control flow, and modifiers
+            Let | Let2 | In | If | Else | Case | Case2 | Of | Cases | Do | Do2 | Do3 | Mdo | Rec | Rec2
+            | Forall | Forall2 | Forall3 | Forall4 | FORALL | Where | Where2 | Import | Import2 | Module | Module2
+            | Export | Export2 | Data | Data2 | Newtype | Newtype2 | Newtype3 | Newtype4 | Newtype5
+            | Type | Type2 | Class | Class2 | Instance | Instance2 | Instance3 | Deriving | Deriving2
+            | Family | Role | Stock | Via | Via2 | Anyclass | Default
+            | Infix | Infix2 | Infix3 | Infix4 | Infix5 | Infix6 | Infix7 | Infix8 | Infixl | Infixr
+            | Foreign | Pattern | Pattern2 | As | As2 | Hiding
+            | Qualified | Qualified2 | Qualified3 | Qualified4 | Qualified5 | Qualified6 | Qualified7 | Qualified8
+            | Then | Group | Group2 | By | Using
+            // Operators: punctuation and formatting symbols
+            | SEMI | COMMA | LBRACE | RBRACE | LBRACE2 | RBRACE2 | LPAREN | RPAREN | LBRACK | RBRACK
+            | UNDERSCORE | SQUOTE | SQUOTESQUOTE | BQUOTE | HASH | HASH2 | AT | BANG | TILDE | PERCENT
+            | DOLLAR | DOLLARDOLLAR | BSLASH | DOT | DOTDOT | LPARENHASH
+            // Operators: logical, mathematical, and type-level arrows/symbols
+            | EQ | EQGT | IMPLIESRIGHTARR | RIGHTARR | DASHGT | DASHGTDOT | LEFTARR | LTDASH | LOLLIPOP
+            | COLONCOLON | CONS | STAR | STAR2 | PIPE | PIPE2 | PIPEPIPE | PIPERBRACK | PIPEPIPERBRACK
+            | DASH | Operator | Operator2 | OperatorMinus | ConstructorOperator
+            | RBRBRACK | LBLBRACK => HalsteadType::Operator,
+
+            // Operands: Identifiers, variables, and names
+            Variable | ImplicitVariable | Name | Label | Qvarid | Qvar | Qconid | Qtyconid | Qname | AllNames
+            | ThQuotedName | FunctionName | Constructor | DataConstructor | ConstructorSynonym
+            // Operands: Literals
+            | Float | Char | String | IntegerLiteral | BinaryLiteral | OctalLiteral | HexLiteral
+            | Integer | Integer2 | Literal | Boolean => HalsteadType::Operand,
+
+            _ => HalsteadType::Unknown,
+        }
+    }
+
+    get_operator!(Haskell);
+}
+
+impl Getter for SwiftCode {
+    fn get_space_kind(node: &Node) -> SpaceKind {
+        use crate::Swift::*;
+
+        match node.kind_id().into() {
+            // Function-like spaces
+            FunctionDeclaration | FunctionDeclaration2 | InitDeclaration | DeinitDeclaration
+            | LambdaLiteral => SpaceKind::Function,
+            // Class/Struct/Enum-like spaces
+            ClassDeclaration | ClassDeclaration2 | TypeLevelDeclaration | Extension => {
+                SpaceKind::Class
+            }
+            // Interfaces/Protocols
+            ProtocolDeclaration => SpaceKind::Interface,
+            // Top-level compilation unit
+            SourceFile => SpaceKind::Unit,
+            _ => SpaceKind::Unknown,
+        }
+    }
+
+    fn get_op_type(node: &Node) -> HalsteadType {
+        use crate::Swift::*;
+
+        match node.kind_id().into() {
+            // Operators: control flow, keywords, modifiers, and types
+            If | Switch | Guard | Case | Fallthrough | Do | For | While | Continue | Break |
+            Return | Yield | In | WhereKeyword | DefaultKeyword | Else | CatchKeyword | ThrowKeyword |
+            Try | TryOperator | Await | Async | Async2 | Throws | ThrowsKeyword | RethrowsKeyword |
+            Let | Var | Func | Macro | Extension | Init | Deinit | Subscript |
+            Get | Set | WillSet | DidSet | Modify | Import | Package | Typealias | Any | Zome | Type |
+            Struct | Class | Enum | Protocol | Protocol2 |
+            Public | Private | Internal | Fileprivate | Open | Mutating | Nonmutating | Static |
+            Dynamic | Optional | Final | Inout | Weak | Unowned | Override | Convenience | Required |
+            Prefix | Infix | Postfix | Operator |
+            // Operators: punctuation, brackets, and formatting symbols
+            LPAREN | LBRACK | LBRACE | COMMA | COLON | SEMI | Semi | DOT | DOT2 | DOTDOTDOT | DOTDOTLT | DASHGT |
+            // Operators: mathematical, logical, and bitwise
+            PLUS | DASH | STAR | SLASH | PERCENT | PLUSPLUS | DASHDASH | PLUS2 | DASH2 |
+            PLUSEQ | DASHEQ | STAREQ | SLASHEQ | PERCENTEQ |
+            EQ | EQEQ | EQEQEQ | BANGEQ | BANGEQEQ | LT | GT | LTEQ | GTEQ |
+            AMPAMP | PIPEPIPE | BANG | BANG2 | QMARK | QMARK2 | QMARK3 | QMARKQMARK |
+            AMP | PIPE | CARET | LTLT | GTGT | TILDE |
+            As | As2 | AsQMARK | AsBANG | AsQuest | AsBang | Is => HalsteadType::Operator,
+
+            // Operands: Identifiers, Types, and Literals
+            Identifier | SimpleIdentifier | ContextualSimpleIdentifier | TypeIdentifier |
+            IntegerLiteral | RealLiteral | HexLiteral | OctLiteral | BinLiteral |
+            StringLiteral | LineStringLiteral | MultiLineStringLiteral | RawStringLiteral |
+            ColorLiteral | FileLiteral | ImageLiteral | UniCharacterLiteral |
+            RegexLiteral | ExtendedRegexLiteral | MultilineRegexLiteral | OnelineRegexLiteral |
+            BooleanLiteral | True | False | Nil | Zelf | Super | BasicLiteral => HalsteadType::Operand,
+
+            _ => HalsteadType::Unknown,
+        }
+    }
+
+    get_operator!(Swift);
+}
+
+impl Getter for ScalaCode {
+    fn get_space_kind(node: &Node) -> SpaceKind {
+        use crate::Scala::*;
+
+        match node.kind_id().into() {
+            // Function-like spaces
+            FunctionDefinition | FunctionDeclaration | FunctionDeclaration2 | 
+            LambdaExpression | ClassConstructor => SpaceKind::Function,
+            
+            // Class/Object/Enum-like spaces
+            ClassDefinition | ClassDefinition2 | ObjectDefinition | 
+            ObjectDefinition2 | EnumDefinition => SpaceKind::Class,
+            
+            // Interfaces/Traits
+            TraitDefinition => SpaceKind::Trait,
+            
+            // Top-level compilation unit
+            CompilationUnit => SpaceKind::Unit,
+            
+            _ => SpaceKind::Unknown,
+        }
+    }
+
+    fn get_op_type(node: &Node) -> HalsteadType {
+        use crate::Scala::*;
+
+        match node.kind_id().into() {
+            // Operators: Keywords, control flow, modifiers
+            If | Else | While | For | Match | Try | Catch | Finally | Return | Throw | Yield | Do |
+            New | Val | Var | Def | Type | Class | Trait | Object | Package | Import | Export |
+            Given | Using | Extension | With | As | Abstract | Final | Sealed | Implicit | Lazy |
+            Override | Private | Protected | Inline | Infix | Open | Transparent | Extends | Derives |
+            Macro | Case | Then | Enum | Opaque |
+            
+            // Operators: Punctuation and structural symbols
+            LPAREN | LBRACE | LBRACK | COLON | COMMA | DOT | SEMI |
+            
+            // Operators: Mathematical, logical, and type-level operators
+            PLUS | DASH | STAR | UNDERSCORE | EQGT | LTCOLON | GTCOLON | LTPERCENT |
+            AT | EQ | HASH | QMARKEQGT | EQGTGT | PIPE | BANG | TILDE | DOLLAR | SQUOTE |
+            LTDASH | GT | AutomaticSemicolon | OperatorIdentifier => HalsteadType::Operator,
+
+            // Operands: Identifiers, Types, and Literals
+            Identifier | Identifier2 | Identifier3 | AlphaIdentifier | BackquotedId |
+            SoftIdentifier | TypeIdentifier | TypeIdentifier2 |
+            IntegerLiteral | FloatingPointLiteral | True | False | CharacterLiteral |
+            NullLiteral | String | BooleanLiteral | Unit | This => HalsteadType::Operand,
+
+            _ => HalsteadType::Unknown,
+        }
+    }
+
+    get_operator!(Scala);
+}

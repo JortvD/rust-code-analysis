@@ -19,6 +19,7 @@ use crate::nargs::{self, NArgs};
 use crate::nom::{self, Nom};
 use crate::npa::{self, Npa};
 use crate::npm::{self, Npm};
+use crate::safecheck::{self, SafeCheck};
 use crate::wmc::{self, Wmc};
 
 use crate::dump_metrics::*;
@@ -95,6 +96,8 @@ pub struct CodeMetrics {
     /// `Npa` data
     #[serde(skip_serializing_if = "npa::Stats::is_disabled")]
     pub npa: npa::Stats,
+
+    pub safecheck: safecheck::Stats,
 }
 
 impl fmt::Display for CodeMetrics {
@@ -124,6 +127,7 @@ impl CodeMetrics {
         self.wmc.merge(&other.wmc);
         self.npm.merge(&other.npm);
         self.npa.merge(&other.npa);
+        self.safecheck.merge(&other.safecheck);
     }
 }
 
@@ -332,6 +336,7 @@ pub fn metrics<'a, T: ParserTrait>(parser: &'a T, path: &'a Path) -> Option<Func
             T::Abc::compute(&node, &mut last.metrics.abc);
             T::Npm::compute(&node, &mut last.metrics.npm);
             T::Npa::compute(&node, &mut last.metrics.npa);
+            T::SafeCheck::compute(&node, &mut last.metrics.safecheck);
         }
 
         cursor.reset(&node);

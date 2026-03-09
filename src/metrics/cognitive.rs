@@ -490,6 +490,232 @@ impl Cognitive for JavaCode {
     }
 }
 
+impl Cognitive for GoCode {
+    fn compute(
+        node: &Node,
+        stats: &mut Stats,
+        nesting_map: &mut HashMap<usize, (usize, usize, usize)>,
+    ) {
+        use crate::Go::*;
+
+        let (mut nesting, mut depth, mut lambda) = get_nesting_from_map(node, nesting_map);
+
+        match node.kind_id().into() {
+            IfStatement => {
+                if !Self::is_else_if(node) {
+                    increase_nesting(stats, &mut nesting, depth, lambda);
+                }
+            }
+            ForStatement | ExpressionSwitchStatement | TypeSwitchStatement | SelectStatement => {
+                increase_nesting(stats, &mut nesting, depth, lambda);
+            }
+            Else /* else-if also */ => {
+                increment_by_one(stats);
+            }
+            UnaryExpression => {
+                stats.boolean_seq.not_operator(node.kind_id());
+            }
+            BinaryExpression => {
+                compute_booleans::<language_go::Go>(node, stats, AMPAMP, PIPEPIPE);
+            }
+            FuncLiteral => {
+                lambda += 1;
+            }
+            FunctionDeclaration | MethodDeclaration => {
+                nesting = 0;
+                increment_function_depth::<language_go::Go>(&mut depth, node, FunctionDeclaration);
+            }
+            _ => {}
+        }
+        nesting_map.insert(node.id(), (nesting, depth, lambda));
+    }
+}
+
+impl Cognitive for HaskellCode {
+    fn compute(
+        node: &Node,
+        stats: &mut Stats,
+        nesting_map: &mut HashMap<usize, (usize, usize, usize)>,
+    ) {
+        use crate::Haskell::*;
+
+        // Get current nesting, depth, and lambda state from the parent
+        let (mut nesting, mut depth, mut lambda) = get_nesting_from_map(node, nesting_map);
+
+        match node.kind_id().into() {
+            // Standard if-then-else
+            Conditional => {
+                if !Self::is_else_if(node) {
+                    increase_nesting(stats, &mut nesting, depth, lambda);
+                }
+            }
+            // Control flow structures that increase cognitive load
+            Case | MultiWayIf | ListComprehension => {
+                increase_nesting(stats, &mut nesting, depth, lambda);
+            }
+            // Else penalty has already been paid by the if/conditional construct
+            Else => {
+                increment_by_one(stats);
+            }
+            // Unary boolean negations
+            Negation | Negation2 => {
+                stats.boolean_seq.not_operator(node.kind_id());
+            }
+            // Note: Haskell groups logical ops (&&, ||) mostly under `Infix` or generic
+            // `Operator` nodes, so we omit `compute_booleans` here unless you extend
+            // the tree-sitter grammar to explicitly tag `AMPAMP` and `PIPEPIPE`.
+
+            // Closures
+            Lambda | LambdaCase | LambdaCases => {
+                lambda += 1;
+            }
+            // Function boundaries (top-level or let-bound)
+            Function | Function2 | Bind => {
+                nesting = 0;
+                lambda = 0; // Reset lambda depth at the function level
+
+                // Increase depth function nesting if this function is inside another
+                increment_function_depth::<crate::Haskell>(&mut depth, node, Function);
+            }
+            _ => {}
+        }
+
+        // Save the node's updated state back into the map for its children
+        nesting_map.insert(node.id(), (nesting, depth, lambda));
+    }
+}
+
+impl Cognitive for SwiftCode {
+    fn compute(
+        node: &Node,
+        stats: &mut Stats,
+        nesting_map: &mut HashMap<usize, (usize, usize, usize)>,
+    ) {
+        use crate::Swift::*;
+
+        let (mut nesting, mut depth, mut lambda) = get_nesting_from_map(node, nesting_map);
+
+        match node.kind_id().into() {
+            IfStatement => {
+                if !Self::is_else_if(node) {
+                    increase_nesting(stats, &mut nesting, depth, lambda);
+                }
+            }
+            ForStatement | WhileStatement | RepeatWhileStatement | SwitchStatement | CatchBlock
+            | TernaryExpression => {
+                increase_nesting(stats, &mut nesting, depth, lambda);
+            }
+            Else | GuardStatement => {
+                // `guard` and `else` blocks get a +1 increment but do not increase the nesting level
+                increment_by_one(stats);
+            }
+            ControlTransferStatement => {
+                // Only labeled break/continue statements increment the cognitive complexity
+                for child in node.children() {
+                    if matches!(child.kind_id().into(), StatementLabel) {
+                        increment_by_one(stats);
+                        break;
+                    }
+                }
+            }
+            PrefixUnaryOperator => {
+                // Ensure it's specifically a negation operator
+                if let Some(child) = node.child(0) {
+                    if matches!(child.kind_id().into(), BANG | BANG2) {
+                        stats.boolean_seq.not_operator(node.kind_id());
+                    }
+                }
+            }
+            ConjunctionExpression | DisjunctionExpression | BinaryExpression => {
+                compute_booleans::<crate::Swift>(node, stats, AMPAMP, PIPEPIPE);
+            }
+            LambdaLiteral => {
+                lambda += 1;
+            }
+            FunctionDeclaration | FunctionDeclaration2 | InitDeclaration | DeinitDeclaration => {
+                // Reset local scope nesting at the function boundary
+                nesting = 0;
+                lambda = 0;
+
+                // Increase depth function nesting if this function is nested inside another
+                let mut child = *node;
+                while let Some(parent) = child.parent() {
+                    if matches!(
+                        parent.kind_id().into(),
+                        FunctionDeclaration
+                            | FunctionDeclaration2
+                            | InitDeclaration
+                            | DeinitDeclaration
+                    ) {
+                        depth += 1;
+                        break;
+                    }
+                    child = parent;
+                }
+            }
+            _ => {}
+        }
+        nesting_map.insert(node.id(), (nesting, depth, lambda));
+    }
+}
+
+impl Cognitive for ScalaCode {
+    fn compute(
+        node: &Node,
+        stats: &mut Stats,
+        nesting_map: &mut HashMap<usize, (usize, usize, usize)>,
+    ) {
+        use crate::Scala::*;
+
+        // Retrieve current nesting, depth, and lambda state from the parent node
+        let (mut nesting, mut depth, mut lambda) = get_nesting_from_map(node, nesting_map);
+
+        match node.kind_id().into() {
+            IfExpression => {
+                if !Self::is_else_if(node) {
+                    increase_nesting(stats, &mut nesting, depth, lambda);
+                }
+            }
+            WhileExpression | DoWhileExpression | ForExpression | MatchExpression | CatchClause => {
+                increase_nesting(stats, &mut nesting, depth, lambda);
+            }
+            Else => {
+                // Else and Else-If pay a +1 penalty but do not increase the nesting multiplier
+                increment_by_one(stats);
+            }
+            LambdaExpression => {
+                // Closures bump the lambda depth for their internal scope
+                lambda += 1;
+            }
+            FunctionDefinition | FunctionDeclaration | FunctionDeclaration2 | ClassConstructor => {
+                // Reset standard local scope nesting at the function boundary
+                nesting = 0;
+                lambda = 0;
+
+                // Increase depth function nesting if this function is nested inside another
+                let mut child = *node;
+                while let Some(parent) = child.parent() {
+                    if matches!(
+                        parent.kind_id().into(),
+                        FunctionDefinition
+                            | FunctionDeclaration
+                            | FunctionDeclaration2
+                            | ClassConstructor
+                    ) {
+                        depth += 1;
+                        break;
+                    }
+                    child = parent;
+                }
+            }
+            _ => {}
+        }
+        
+        // Save the node's updated state back into the map for its children
+        nesting_map.insert(node.id(), (nesting, depth, lambda));
+    }
+}
+
 implement_metric_trait!(Cognitive, PreprocCode, CcommentCode, KotlinCode);
 
 #[cfg(test)]

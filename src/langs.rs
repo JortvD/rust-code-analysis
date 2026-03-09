@@ -126,6 +126,46 @@ mk_langs!(
         tree_sitter_preproc,
         [],
         []
+    ),
+    (
+        Go,
+        "The `Go` language",
+        "go",
+        GoCode,
+        GoParser,
+        tree_sitter_go,
+        [go],
+        ["go"]
+    ),
+    (
+        Haskell,
+        "The `Haskell` language",
+        "haskell",
+        HaskellCode,
+        HaskellParser,
+        tree_sitter_haskell,
+        [hs, lhs],
+        ["haskell"]
+    ),
+    (
+        Swift,
+        "The `Swift` language",
+        "swift",
+        SwiftCode,
+        SwiftParser,
+        tree_sitter_swift,
+        [swift],
+        ["swift"]
+    ),
+    (
+        Scala,
+        "The `Scala` language",
+        "scala",
+        ScalaCode,
+        ScalaParser,
+        tree_sitter_scala,
+        [scala],
+        ["scala"]
     )
 );
 

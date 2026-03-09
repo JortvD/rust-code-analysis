@@ -86,6 +86,9 @@ impl Alterator for PythonCode {}
 
 impl Alterator for JavaCode {}
 impl Alterator for KotlinCode {}
+impl Alterator for GoCode {}
+
+impl Alterator for HaskellCode {}
 
 impl Alterator for MozjsCode {
     fn alterate(node: &Node, code: &[u8], span: bool, children: Vec<AstNode>) -> AstNode {
@@ -141,6 +144,21 @@ impl Alterator for RustCode {
     fn alterate(node: &Node, code: &[u8], span: bool, children: Vec<AstNode>) -> AstNode {
         match Rust::from(node.kind_id()) {
             Rust::StringLiteral | Rust::CharLiteral => {
+                let (text, span) = Self::get_text_span(node, code, span, true);
+                AstNode::new(node.kind(), text, span, Vec::new())
+            }
+            _ => Self::get_default(node, code, span, children),
+        }
+    }
+}
+
+impl Alterator for SwiftCode {
+    fn alterate(node: &Node, code: &[u8], span: bool, children: Vec<AstNode>) -> AstNode {
+        match Swift::from(node.kind_id()) {
+            Swift::StringLiteral
+            | Swift::LineStringLiteral
+            | Swift::MultiLineStringLiteral
+            | Swift::RawStringLiteral => {
                 let (text, span) = Self::get_text_span(node, code, span, true);
                 AstNode::new(node.kind(), text, span, Vec::new())
             }

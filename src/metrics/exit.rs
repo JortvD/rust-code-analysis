@@ -182,6 +182,57 @@ impl Exit for JavaCode {
     }
 }
 
+impl Exit for GoCode {
+    fn compute(node: &Node, stats: &mut Stats) {
+        if matches!(node.kind_id().into(), Go::ReturnStatement) {
+            stats.exit += 1;
+        }
+    }
+}
+
+impl Exit for HaskellCode {
+    fn compute(node: &Node, stats: &mut Stats) {
+        use crate::Haskell::*;
+
+        match node.kind_id().into() {
+            // In Haskell, every pattern match equation or case alternative
+            // acts as an implicit return/exit point yielding a value.
+            Match | Match2 | Match3 | Match4 | Alternative | Alternative2 => {
+                stats.exit += 1;
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Exit for SwiftCode {
+    fn compute(node: &Node, stats: &mut Stats) {
+        use crate::Swift::*;
+
+        match node.kind_id().into() {
+            // Explicit returns and error throws act as exit points
+            Return | ThrowKeyword => {
+                stats.exit += 1;
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Exit for ScalaCode {
+    fn compute(node: &Node, stats: &mut Stats) {
+        use crate::Scala::*;
+
+        match node.kind_id().into() {
+            // Explicit return statements and thrown exceptions
+            ReturnExpression | ThrowExpression => {
+                stats.exit += 1;
+            }
+            _ => {}
+        }
+    }
+}
+
 implement_metric_trait!(Exit, KotlinCode, PreprocCode, CcommentCode);
 
 #[cfg(test)]

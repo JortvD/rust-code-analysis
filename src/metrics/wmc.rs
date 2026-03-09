@@ -151,7 +151,11 @@ implement_metric_trait!(
     CppCode,
     PreprocCode,
     CcommentCode,
-    KotlinCode
+    KotlinCode,
+    GoCode,
+    HaskellCode,
+    SwiftCode,
+    ScalaCode
 );
 
 #[cfg(test)]

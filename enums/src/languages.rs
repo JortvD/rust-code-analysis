@@ -13,5 +13,9 @@ mk_langs!(
     (Ccomment, tree_sitter_ccomment),
     (Preproc, tree_sitter_preproc),
     (Mozjs, tree_sitter_mozjs),
-    (Javascript, tree_sitter_javascript)
+    (Javascript, tree_sitter_javascript),
+    (Haskell, tree_sitter_haskell),
+    (Swift, tree_sitter_swift),
+    (Scala, tree_sitter_scala),
+    (Go, tree_sitter_go)
 );

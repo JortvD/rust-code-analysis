@@ -857,6 +857,203 @@ impl Loc for JavaCode {
     }
 }
 
+impl Loc for GoCode {
+    fn compute(node: &Node, stats: &mut Stats, is_func_space: bool, is_unit: bool) {
+        use crate::Go::*;
+
+        let (start, end) = init(node, stats, is_func_space, is_unit);
+        match node.kind_id().into() {
+            SourceFile => {}
+            Comment => {
+                add_cloc_lines(stats, start, end);
+            }
+            // LLOC: count statements
+            ExpressionStatement
+            | SendStatement
+            | IncStatement
+            | DecStatement
+            | AssignmentStatement
+            | ShortVarDeclaration
+            | VarDeclaration
+            | ConstDeclaration
+            | TypeDeclaration
+            | GoStatement
+            | DeferStatement
+            | ReturnStatement
+            | BreakStatement
+            | ContinueStatement
+            | GotoStatement
+            | FallthroughStatement
+            | IfStatement
+            | ExpressionSwitchStatement
+            | TypeSwitchStatement
+            | SelectStatement
+            | ForStatement => {
+                stats.lloc.logical_lines += 1;
+            }
+            _ => {
+                check_comment_ends_on_code_line(stats, start);
+                stats.ploc.lines.insert(start);
+            }
+        }
+    }
+}
+
+impl Loc for HaskellCode {
+    fn compute(node: &Node, stats: &mut Stats, is_func_space: bool, is_unit: bool) {
+        use crate::Haskell::*;
+
+        let (start, end) = init(node, stats, is_func_space, is_unit);
+
+        match node.kind_id().into() {
+            // Root node and strings don't act as ploc/lloc directly
+            Haskell | String => {}
+
+            // Comments and Haddock documentation
+            Comment | Haddock | Cpp | Pragma => {
+                add_cloc_lines(stats, start, end);
+            }
+
+            // LLOC: Count logical statements and declarations.
+            // In Haskell, logical statements include top-level declarations,
+            // type signatures, let/where bindings, and statements inside do-blocks.
+            Signature | Signature2 | Signature3 | Signature4 | Signature5 | Signature6
+            | Declaration | Decl | LocalDecl | Bind | Statement | Generator | Let | ClassDecl
+            | InstanceDecl | DataType | DataType2 | DataType3 | Newtype | Newtype2 | Newtype3
+            | TypeSynomym | Import => {
+                stats.lloc.logical_lines += 1;
+            }
+
+            // Everything else is considered part of the physical lines of code (PLOC)
+            _ => {
+                check_comment_ends_on_code_line(stats, start);
+                stats.ploc.lines.insert(start);
+            }
+        }
+    }
+}
+
+impl Loc for SwiftCode {
+    fn compute(node: &Node, stats: &mut Stats, is_func_space: bool, is_unit: bool) {
+        use crate::Swift::*;
+
+        let (start, end) = init(node, stats, is_func_space, is_unit);
+
+        match node.kind_id().into() {
+            // Root nodes and string boundaries/content do not directly add to LLOC/PLOC
+            SourceFile
+            | StringLiteral
+            | MultiLineStringLiteral
+            | RawStringLiteral
+            | LineStringLiteral
+            | RegexLiteral
+            | ExtendedRegexLiteral
+            | MultilineRegexLiteral
+            | OnelineRegexLiteral => {}
+
+            // Comments
+            Comment | MultilineComment => {
+                add_cloc_lines(stats, start, end);
+            }
+
+            // Logical Lines of Code (LLOC): Statements, Declarations, and Control Flow
+            IfStatement
+            | GuardStatement
+            | SwitchStatement
+            | ForStatement
+            | WhileStatement
+            | RepeatWhileStatement
+            | DoStatement
+            | CatchBlock
+            | ControlTransferStatement
+            | ThrowStatement
+            | Assignment
+            | PropertyDeclaration
+            | PropertyDeclaration2
+            | FunctionDeclaration
+            | FunctionDeclaration2
+            | ClassDeclaration
+            | ClassDeclaration2
+            | ProtocolDeclaration
+            | Enum
+            | Struct
+            | TypealiasDeclaration
+            | TypealiasDeclaration2
+            | Extension
+            | InitDeclaration
+            | DeinitDeclaration
+            | SubscriptDeclaration
+            | OperatorDeclaration
+            | MacroDeclaration
+            | LocalDeclaration => {
+                stats.lloc.logical_lines += 1;
+            }
+
+            // Physical Lines of Code (PLOC): Everything else that isn't a comment/root
+            _ => {
+                check_comment_ends_on_code_line(stats, start);
+                stats.ploc.lines.insert(start);
+            }
+        }
+    }
+}
+
+impl Loc for ScalaCode {
+    fn compute(node: &Node, stats: &mut Stats, is_func_space: bool, is_unit: bool) {
+        use crate::Scala::*;
+
+        let (start, end) = init(node, stats, is_func_space, is_unit);
+
+        match node.kind_id().into() {
+            // Root nodes and strings do not directly add to LLOC/PLOC
+            CompilationUnit | String | InterpolatedString | InterpolatedString2 => {}
+
+            // Comments
+            Comment | Comment2 | BlockComment => {
+                add_cloc_lines(stats, start, end);
+            }
+
+            // Logical Lines of Code (LLOC): Statements, Declarations, and Control Flow
+            ValDefinition
+            | ValDeclaration
+            | VarDefinition
+            | VarDeclaration
+            | TypeDefinition
+            | FunctionDefinition
+            | FunctionDeclaration
+            | FunctionDeclaration2
+            | ClassDefinition
+            | ClassDefinition2
+            | TraitDefinition
+            | ObjectDefinition
+            | ObjectDefinition2
+            | EnumDefinition
+            | GivenDefinition
+            | ExtensionDefinition
+            | IfExpression
+            | WhileExpression
+            | DoWhileExpression
+            | ForExpression
+            | MatchExpression
+            | TryExpression
+            | ReturnExpression
+            | ThrowExpression
+            | AssignmentExpression
+            | ImportDeclaration
+            | ExportDeclaration
+            | PackageClause => {
+                stats.lloc.logical_lines += 1;
+            }
+
+            // Physical Lines of Code (PLOC): Everything else that isn't a comment/root
+            _ => {
+                check_comment_ends_on_code_line(stats, start);
+                stats.ploc.lines.insert(start);
+            }
+        }
+    }
+}
+
 implement_metric_trait!(Loc, PreprocCode, CcommentCode, KotlinCode);
 
 #[cfg(test)]

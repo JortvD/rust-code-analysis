@@ -49,6 +49,13 @@ macro_rules! implement_metric_trait {
            }
         )+
     );
+    (UnsafeCode, $($code:ident),+) => (
+        $(
+           impl UnsafeCode for $code {
+               fn compute(_node: &Node, _stats: &mut Stats) {}
+           }
+        )+
+    );
     ([$trait:ident], $($code:ident),+) => (
         $(
            impl $trait for $code {}

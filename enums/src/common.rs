@@ -23,8 +23,19 @@ pub fn sanitize_identifier(name: &str) -> String {
     if name == "Self" {
         return "SELF".to_string();
     }
+    if name == "some" {
+        return "Zome".to_string();
+    }
+    if name == "Some" {
+        return "SOME".to_string();
+    }
 
     let mut result = String::with_capacity(name.len());
+
+    if name.starts_with(|c: char| c.is_numeric()) {
+        result.push_str("NUM");
+    }
+
     for c in name.chars() {
         if ('a'..='z').contains(&c)
             || ('A'..='Z').contains(&c)
@@ -68,6 +79,17 @@ pub fn sanitize_identifier(name: &str) -> String {
                 '\n' => "LF",
                 '\r' => "CR",
                 '\t' => "TAB",
+                // Haskell operators
+                '★' => "STAR2",
+                '∀' => "FORALL",
+                '⟧' => "RBRBRACK",
+                '⟦' => "LBLBRACK",
+                '⇒' => "IMPLIESRIGHTARR",
+                '→' => "RIGHTARR",
+                '←' => "LEFTARR",
+                '⊸' => "LOLLIPOP",
+                '∷' => "CONS",
+
                 _ => continue,
             };
             if !result.is_empty() && !result.ends_with('_') {
@@ -133,7 +155,10 @@ pub fn get_token_names(language: &Language, escape: bool) -> Vec<(String, bool, 
             if anonymous != *anon {
                 continue;
             }
-            let kind = language.node_kind_for_id(i as u16).unwrap();
+            let mut kind = language.node_kind_for_id(i as u16).unwrap();
+            if kind.is_empty() {
+                kind = "\n";
+            }
             let name = sanitize_identifier(kind);
             let ts_name = sanitize_string(kind, escape);
             let name = camel_case(name);

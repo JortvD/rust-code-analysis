@@ -221,6 +221,87 @@ impl Cyclomatic for JavaCode {
     }
 }
 
+impl Cyclomatic for GoCode {
+    fn compute(node: &Node, stats: &mut Stats) {
+        use crate::Go::*;
+
+        match node.kind_id().into() {
+            If | For | ExpressionCase | DefaultCase | TypeCase | CommunicationCase | AMPAMP
+            | PIPEPIPE => {
+                stats.cyclomatic += 1.;
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Cyclomatic for HaskellCode {
+    fn compute(node: &Node, stats: &mut Stats) {
+        use crate::Haskell::*;
+
+        match node.kind_id().into() {
+            // Standard if expressions (if-then-else)
+            If |
+            // Case expression branches
+            Alternative | Alternative2 |
+            // Function equations (pattern matching bindings)
+            Match | Match2 | Match3 | Match4 |
+            // Guards (used in functions, multi-way ifs, and case alternatives)
+            Guard |
+            // List comprehension generators (act similarly to loops)
+            Generator |
+            // Logical OR operator
+            PIPEPIPE => {
+                stats.cyclomatic += 1.;
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Cyclomatic for SwiftCode {
+    fn compute(node: &Node, stats: &mut Stats) {
+        use crate::Swift::*;
+
+        match node.kind_id().into() {
+            // Control flow statements
+            IfStatement | GuardStatement | ForStatement | WhileStatement | RepeatWhileStatement |
+            // Cases in a switch statement (SwitchEntry covers both `case` and `default`)
+            SwitchEntry | CatchBlock |
+            // Ternary and Nil-Coalescing
+            TernaryExpression | NilCoalescingExpression |
+            // Logical operators
+            AMPAMP | PIPEPIPE => {
+                stats.cyclomatic += 1.;
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Cyclomatic for ScalaCode {
+    fn compute(node: &Node, stats: &mut Stats) {
+        use crate::Scala::*;
+
+        match node.kind_id().into() {
+            // Standard control flow
+            If | For | While | Case | Catch | 
+            
+            // Loop modifiers and fallbacks
+            Do | Yield | 
+            
+            // Note: Similar to earlier metrics, Scala groups `&&` and `||` under 
+            // `OperatorIdentifier` rather than discrete syntax nodes in tree-sitter. 
+            // Because we can't cleanly distinguish them from `+` or `-` at the ID level, 
+            // we rely strictly on structural branching nodes to calculate Cyclomatic complexity.
+            IfExpression => {
+                stats.cyclomatic += 1.;
+            }
+            _ => {}
+        }
+    }
+}
+
 implement_metric_trait!(Cyclomatic, KotlinCode, PreprocCode, CcommentCode);
 
 #[cfg(test)]

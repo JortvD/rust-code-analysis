@@ -353,7 +353,11 @@ implement_metric_trait!(
     CppCode,
     PreprocCode,
     CcommentCode,
-    KotlinCode
+    KotlinCode,
+    GoCode,
+    HaskellCode,
+    SwiftCode,
+    ScalaCode
 );
 
 // Fitzpatrick, Jerry (1997). "Applying the ABC metric to C, C++ and Java". C++ Report.
@@ -588,6 +592,41 @@ mod tests {
                       "conditions_average": 0.0,
                       "assignments_min": 0.0,
                       "assignments_max": 4.0,
+                      "branches_min": 0.0,
+                      "branches_max": 0.0,
+                      "conditions_min": 0.0,
+                      "conditions_max": 0.0
+                    }"###
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn swift_constant_declarations() {
+        check_metrics::<SwiftParser>(
+            "let x = 0, y = 0;          // +0a
+             let PI = 3.14;            // +0a
+             var e = 2.718;            // +1a
+             var t = 60.0;             // +1a
+            ",
+            "foo.swift",
+            |metric| {
+                // magnitude: sqrt(4 + 0 + 0) = sqrt(4)
+                // space count: 1 (1 unit)
+                insta::assert_json_snapshot!(
+                    metric.abc,
+                    @r###"
+                    {
+                      "assignments": 5.0,
+                      "branches": 0.0,
+                      "conditions": 0.0,
+                      "magnitude": 5.0,
+                      "assignments_average": 5.0,
+                      "branches_average": 0.0,
+                      "conditions_average": 0.0,
+                      "assignments_min": 5.0,
+                      "assignments_max": 5.0,
                       "branches_min": 0.0,
                       "branches_max": 0.0,
                       "conditions_min": 0.0,

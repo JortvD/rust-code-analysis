@@ -229,6 +229,175 @@ impl NArgs for CppCode {
     }
 }
 
+impl NArgs for HaskellCode {
+    fn compute(node: &Node, stats: &mut Stats) {
+        use crate::Haskell::*;
+
+        fn count_spine(n: &Node) -> usize {
+            if matches!(n.kind_id().into(), Apply | Apply2 | Apply3 | Apply4) {
+                n.children()
+                    .filter(|c| !HaskellCode::is_non_arg(c))
+                    .map(|c| count_spine(&c))
+                    .sum()
+            } else {
+                1
+            }
+        }
+
+        let count_lhs_args = |n: &Node| -> usize {
+            if matches!(n.kind_id().into(), LambdaCase) {
+                return 1;
+            }
+
+            let patterns_node = n.child_by_field_name("patterns").or_else(|| {
+                n.children()
+                    .find(|c| matches!(c.kind_id().into(), Patterns | TypePatterns))
+            });
+
+            if let Some(p) = patterns_node {
+                return p.children().filter(|c| !Self::is_non_arg(c)).count();
+            }
+
+            let mut total_components = 0;
+            for child in n.children() {
+                let kind = child.kind_id().into();
+                if matches!(
+                    kind,
+                    EQ | PIPE | PIPE2 | Bar | RIGHTARR | DASHGT | Guard | Guards | Guards2
+                ) {
+                    break;
+                }
+                if !Self::is_non_arg(&child) {
+                    total_components += count_spine(&child);
+                }
+            }
+
+            if matches!(n.kind_id().into(), Lambda | LambdaCases) {
+                total_components
+            } else {
+                total_components.saturating_sub(1)
+            }
+        };
+
+        if Self::is_func(node) {
+            let equation_node = node
+                .children()
+                .find(|c| matches!(c.kind_id().into(), Match | Match2 | Match3 | Match4))
+                .unwrap_or(*node);
+
+            stats.fn_nargs += count_lhs_args(&equation_node);
+        } else if Self::is_closure(node) {
+            let equation_node = if matches!(node.kind_id().into(), LambdaCases) {
+                node.children()
+                    .find(|c| matches!(c.kind_id().into(), Match | Match2 | Match3 | Match4))
+                    .unwrap_or(*node)
+            } else {
+                *node
+            };
+
+            stats.closure_nargs += count_lhs_args(&equation_node);
+        }
+    }
+}
+
+impl NArgs for SwiftCode {
+    fn compute(node: &Node, stats: &mut Stats) {
+        use crate::Swift::*;
+
+        if Self::is_func(node) {
+            // Standard Swift functions use the "parameters" field, so the default works perfectly.
+            compute_args::<Self>(node, &mut stats.fn_nargs);
+            return;
+        }
+
+        if Self::is_closure(node) {
+            // Try the standard "parameters" field first
+            if node.child_by_field_name("parameters").is_some() {
+                compute_args::<Self>(node, &mut stats.closure_nargs);
+            } else {
+                // Fallback: Manually traverse the closure definition to find arguments
+                for child in node.children() {
+                    if matches!(child.kind_id().into(), LambdaTypeDeclaration) {
+                        let mut args_count = 0;
+
+                        for param_node in child.children() {
+                            let kind = param_node.kind_id().into();
+
+                            if kind == LambdaFunctionTypeParameters {
+                                // Explicit tuple parameters: { (x: Int, y: Int) in ... }
+                                param_node.act_on_child(&mut |n| {
+                                    if !Self::is_non_arg(n) {
+                                        args_count += 1;
+                                    }
+                                });
+                            } else if matches!(kind, LambdaParameter | SimpleIdentifier) {
+                                // Bare parameters: { x, y in ... }
+                                args_count += 1;
+                            }
+                        }
+
+                        stats.closure_nargs += args_count;
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl NArgs for ScalaCode {
+    fn compute(node: &Node, stats: &mut Stats) {
+        use crate::Scala::*;
+
+        if Self::is_func(node) {
+            let mut args_count = 0;
+
+            // Scala functions and constructors can have multiple parameter lists (currying).
+            // Example: `def foo(a: Int)(b: Int)` or `class MyClass(x: Int)(using y: String)`
+            // Tree-sitter models these as repeated sibling parameter nodes rather than a single field.
+            for child in node.children() {
+                let kind = child.kind_id().into();
+                if matches!(
+                    kind,
+                    Parameters | ClassParameters | UsingParametersClause
+                ) {
+                    for param_child in child.children() {
+                        if !Self::is_non_arg(&param_child) {
+                            args_count += 1;
+                        }
+                    }
+                }
+            }
+            stats.fn_nargs += args_count;
+            return;
+        }
+
+        if Self::is_closure(node) {
+            let mut args_count = 0;
+
+            // Scala lambdas assign their parameters to the 'parameters' field.
+            if let Some(params) = node.child_by_field_name("parameters") {
+                let kind = params.kind_id().into();
+                
+                // Lambdas with explicit parameter lists like `(a: Int, b: Int) => ...` (Bindings)
+                // or `(a, b) => ...` (Identifiers)
+                if matches!(kind, Bindings | Identifiers) {
+                    for param_child in params.children() {
+                        if !Self::is_non_arg(&param_child) {
+                            args_count += 1;
+                        }
+                    }
+                } 
+                // Single unparenthesized parameters like `a => ...` or `_ => ...`
+                else if !Self::is_non_arg(&params) {
+                    args_count += 1;
+                }
+            }
+            
+            stats.closure_nargs += args_count;
+        }
+    }
+}
+
 implement_metric_trait!(
     [NArgs],
     PythonCode,
@@ -240,7 +409,8 @@ implement_metric_trait!(
     PreprocCode,
     CcommentCode,
     JavaCode,
-    KotlinCode
+    KotlinCode,
+    GoCode
 );
 
 #[cfg(test)]

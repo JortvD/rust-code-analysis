@@ -703,3 +703,323 @@ impl Checker for KotlinCode {
         false
     }
 }
+
+impl Checker for GoCode {
+    fn is_comment(node: &Node) -> bool {
+        node.kind_id() == Go::Comment
+    }
+
+    fn is_useful_comment(_: &Node, _: &[u8]) -> bool {
+        false
+    }
+
+    fn is_func_space(node: &Node) -> bool {
+        matches!(
+            node.kind_id().into(),
+            Go::SourceFile | Go::FunctionDeclaration | Go::MethodDeclaration
+        )
+    }
+
+    fn is_func(node: &Node) -> bool {
+        matches!(
+            node.kind_id().into(),
+            Go::FunctionDeclaration | Go::MethodDeclaration
+        )
+    }
+
+    fn is_closure(node: &Node) -> bool {
+        node.kind_id() == Go::FuncLiteral
+    }
+
+    fn is_call(node: &Node) -> bool {
+        node.kind_id() == Go::CallExpression
+    }
+
+    fn is_non_arg(node: &Node) -> bool {
+        matches!(node.kind_id().into(), Go::LPAREN | Go::COMMA | Go::RPAREN)
+    }
+
+    fn is_string(node: &Node) -> bool {
+        matches!(
+            node.kind_id().into(),
+            Go::RawStringLiteral | Go::InterpretedStringLiteral
+        )
+    }
+
+    fn is_else_if(node: &Node) -> bool {
+        if node.kind_id() != Go::IfStatement {
+            return false;
+        }
+        if let Some(parent) = node.parent() {
+            return parent.kind_id() == Go::IfStatement;
+        }
+        false
+    }
+
+    fn is_primitive(_id: u16) -> bool {
+        false
+    }
+}
+
+impl Checker for HaskellCode {
+    fn is_comment(node: &Node) -> bool {
+        use crate::Haskell::*;
+        matches!(node.kind_id().into(), Comment | Haddock | Cpp | Pragma)
+    }
+
+    fn is_useful_comment(_: &Node, _: &[u8]) -> bool {
+        false
+    }
+
+    fn is_func_space(node: &Node) -> bool {
+        use crate::Haskell::*;
+        matches!(
+            node.kind_id().into(),
+            Haskell | Function | Function2 | Bind | ClassDecl | InstanceDecl
+        )
+    }
+
+    fn is_func(node: &Node) -> bool {
+        use crate::Haskell::*;
+        matches!(node.kind_id().into(), Function | Function2 | Bind)
+    }
+
+    fn is_closure(node: &Node) -> bool {
+        use crate::Haskell::*;
+        matches!(node.kind_id().into(), Lambda | LambdaCase | LambdaCases)
+    }
+
+    fn is_call(node: &Node) -> bool {
+        use crate::Haskell::*;
+        // Haskell function applications are represented as "apply"
+        matches!(node.kind_id().into(), Apply | Apply2 | Apply3 | Apply4)
+    }
+
+    fn is_non_arg(node: &Node) -> bool {
+        use crate::Haskell::*;
+        matches!(
+            node.kind_id().into(),
+            LPAREN | COMMA | RPAREN | LBRACK | RBRACK
+        )
+    }
+
+    fn is_string(node: &Node) -> bool {
+        node.kind_id() == crate::Haskell::String
+    }
+
+    fn is_else_if(node: &Node) -> bool {
+        use crate::Haskell::*;
+        // A Haskell "else if" is just a Conditional (if-then-else) nested
+        // directly inside another Conditional's else branch.
+        if node.kind_id() != Conditional {
+            return false;
+        }
+        if let Some(parent) = node.parent() {
+            return parent.kind_id() == Conditional;
+        }
+        false
+    }
+
+    fn is_primitive(_id: u16) -> bool {
+        false
+    }
+}
+
+impl Checker for SwiftCode {
+    fn is_comment(node: &Node) -> bool {
+        matches!(
+            node.kind_id().into(),
+            Swift::Comment | Swift::MultilineComment
+        )
+    }
+
+    fn is_useful_comment(_: &Node, _: &[u8]) -> bool {
+        // Swift generally doesn't have standard "useful" comments (like cbindgen or coding info)
+        // in the context of these metrics, so we default to false.
+        false
+    }
+
+    fn is_func_space(node: &Node) -> bool {
+        matches!(
+            node.kind_id().into(),
+            Swift::SourceFile
+                | Swift::FunctionDeclaration
+                | Swift::FunctionDeclaration2
+                | Swift::ClassDeclaration
+                | Swift::ClassDeclaration2
+                | Swift::ProtocolDeclaration
+                | Swift::Extension
+                | Swift::InitDeclaration
+                | Swift::DeinitDeclaration
+                | Swift::LambdaLiteral
+        )
+    }
+
+    fn is_func(node: &Node) -> bool {
+        matches!(
+            node.kind_id().into(),
+            Swift::FunctionDeclaration
+                | Swift::FunctionDeclaration2
+                | Swift::InitDeclaration
+                | Swift::DeinitDeclaration
+        )
+    }
+
+    fn is_closure(node: &Node) -> bool {
+        node.kind_id() == Swift::LambdaLiteral
+    }
+
+    fn is_call(node: &Node) -> bool {
+        matches!(
+            node.kind_id().into(),
+            Swift::CallExpression | Swift::CallExpression2 | Swift::MacroInvocation
+        )
+    }
+
+    fn is_non_arg(node: &Node) -> bool {
+        matches!(
+            node.kind_id().into(),
+            Swift::LPAREN | Swift::COMMA | Swift::RPAREN | Swift::LBRACK | Swift::RBRACK
+        )
+    }
+
+    fn is_string(node: &Node) -> bool {
+        matches!(
+            node.kind_id().into(),
+            Swift::StringLiteral
+                | Swift::LineStringLiteral
+                | Swift::MultiLineStringLiteral
+                | Swift::RawStringLiteral
+        )
+    }
+
+    fn is_else_if(node: &Node) -> bool {
+        if node.kind_id() != Swift::IfStatement {
+            return false;
+        }
+        // In Swift's tree-sitter grammar, an `else if` is usually an `IfStatement`
+        // nested directly inside the `ElseOptions` or `Else` of a parent `IfStatement`.
+        if let Some(parent) = node.parent() {
+            return matches!(parent.kind_id().into(), Swift::ElseOptions | Swift::Else);
+        }
+        false
+    }
+
+    fn is_primitive(_id: u16) -> bool {
+        // Swift handles types largely via `TypeIdentifier` or `SimpleIdentifier`.
+        // There isn't a dedicated `PrimitiveType` node in the tree-sitter-swift grammar.
+        false
+    }
+}
+
+impl Checker for ScalaCode {
+    fn is_comment(node: &Node) -> bool {
+        use crate::Scala::*;
+        matches!(
+            node.kind_id().into(),
+            Comment | Comment2 | BlockComment
+        )
+    }
+
+    fn is_useful_comment(_: &Node, _: &[u8]) -> bool {
+        // Typically false for Scala in this context, unless you have specific 
+        // directives (like scalafmt comments) you want to preserve as useful.
+        false
+    }
+
+    fn is_func_space(node: &Node) -> bool {
+        use crate::Scala::*;
+        matches!(
+            node.kind_id().into(),
+            CompilationUnit
+                | ClassDefinition
+                | ClassDefinition2
+                | ObjectDefinition
+                | ObjectDefinition2
+                | TraitDefinition
+                | EnumDefinition
+                | FunctionDefinition
+                | FunctionDeclaration
+                | FunctionDeclaration2
+                | ClassConstructor
+                | LambdaExpression
+        )
+    }
+
+    fn is_func(node: &Node) -> bool {
+        use crate::Scala::*;
+        matches!(
+            node.kind_id().into(),
+            FunctionDefinition
+                | FunctionDeclaration
+                | FunctionDeclaration2
+                | ClassConstructor
+        )
+    }
+
+    fn is_closure(node: &Node) -> bool {
+        node.kind_id() == crate::Scala::LambdaExpression
+    }
+
+    fn is_call(node: &Node) -> bool {
+        node.kind_id() == crate::Scala::CallExpression
+    }
+
+    fn is_non_arg(node: &Node) -> bool {
+        use crate::Scala::*;
+        matches!(
+            node.kind_id().into(),
+            LPAREN | RPAREN | COMMA | LBRACK | RBRACK
+        )
+    }
+
+    fn is_string(node: &Node) -> bool {
+        use crate::Scala::*;
+        matches!(
+            node.kind_id().into(),
+            String
+                | InterpolatedString
+                | InterpolatedString2
+                | InterpolatedStringExpression
+        )
+    }
+
+    fn is_else_if(node: &Node) -> bool {
+        use crate::Scala::*;
+        
+        if node.kind_id() != IfExpression {
+            return false;
+        }
+        
+        // In Scala tree-sitter, an `else if` is an `IfExpression` that acts 
+        // as the direct child of the `Else` node belonging to a parent `IfExpression`.
+        if let Some(parent) = node.parent() {
+            return parent.kind_id() == Else;
+        }
+        false
+    }
+
+    #[inline(always)]
+    fn is_primitive(_id: u16) -> bool {
+        // Scala treats everything as an object, and its AST doesn't strongly isolate 
+        // a `PrimitiveType` node. Types like `Int` or `Boolean` are parsed as `TypeIdentifier`.
+        false
+    }
+}
+
+impl Alterator for ScalaCode {
+    fn alterate(node: &Node, code: &[u8], span: bool, children: Vec<AstNode>) -> AstNode {
+        match Scala::from(node.kind_id()) {
+            Scala::String
+            | Scala::InterpolatedString
+            | Scala::InterpolatedString2
+            | Scala::CharacterLiteral => {
+                // Force text extraction and drop children for strings/chars, 
+                // preventing interpolated strings from creating unnecessary deep nested ASTs
+                let (text, span) = Self::get_text_span(node, code, span, true);
+                AstNode::new(node.kind(), text, span, Vec::new())
+            }
+            _ => Self::get_default(node, code, span, children),
+        }
+    }
+}
