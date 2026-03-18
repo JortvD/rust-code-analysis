@@ -77,7 +77,7 @@ where
 }
 
 #[inline(always)]
-fn add_unsafe_lines(node: &Node, stats: &mut Stats, start: usize, end: usize) {
+fn add_unsafe_lines(stats: &mut Stats, start: usize, end: usize) {
     for line in start..=end {
         stats.unsafe_lines.insert(line);
     }
@@ -99,7 +99,20 @@ impl Thesis for RustCode {
         use crate::Rust::*;
 
         match node.kind_id().into() {
-            UnsafeBlock => add_unsafe_lines(node, stats, node.start_row(), node.end_row()),
+            UnsafeBlock => add_unsafe_lines(stats, node.start_row(), node.end_row()),
+            ImplItem | TraitItem => {
+                let mut children = node.children();
+                if children.any(|child| Into::<Rust>::into(child.kind_id()) == Unsafe) {
+                    add_unsafe_lines(stats, node.start_row(), node.end_row());
+                }
+            }
+            FunctionModifiers => {
+                let mut children = node.children();
+                if children.any(|child| Into::<Rust>::into(child.kind_id()) == Unsafe) {
+                    let parent = node.parent().unwrap();
+                    add_unsafe_lines(stats, parent.start_row(), parent.end_row());
+                }
+            }
             _ => {}
         }
 
@@ -126,12 +139,12 @@ impl Thesis for CppCode {
         
         match &node.kind_id().into() {
             PointerExpression | SubscriptExpression | NewExpression | DeleteExpression | CastExpression => {
-                add_unsafe_lines(node, stats, node.start_row(), node.end_row());
+                add_unsafe_lines(stats, node.start_row(), node.end_row());
             }
             CallExpression | CallExpression2 => {
                 if let Some(function_node) = node.child_by_field_name("function") && let Some(function_name) = function_node.utf8_text(node.2) {
                     if matches!(function_name.trim(), "malloc" | "calloc" | "realloc" | "free" | "memcpy" | "memmove" | "memset" | "strcpy" | "strncpy" | "sprintf" | "vsprintf" | "snprintf" | "vsnprintf" | "strcat" | "strncat" | "gets" | "scanf" | "sscanf" | "fscanf" | "bcopy" | "bzero" | "strdup" | "strndup" | "memcmp" | "strlen" | "posix_memalign" | "valloc" | "alloca") {
-                        add_unsafe_lines(node, stats, node.start_row(), node.end_row());
+                        add_unsafe_lines(stats, node.start_row(), node.end_row());
                     }
                 }
             }
