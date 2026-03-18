@@ -685,6 +685,24 @@ fn check_test_parent(node: &Node, stats: &mut Stats, predicate: impl Fn(&str) ->
 }
 
 #[inline(always)]
+fn check_test_previous_siblings(node: &Node, stats: &mut Stats, sib_type: &str, predicate: impl Fn(&str) -> bool) {
+    let mut sibling = node.previous_sibling();
+    while let Some(s) = sibling {
+        if s.kind() == sib_type {
+            if let Some(text) = s.utf8_text(s.2) {
+                if predicate(text) {
+                    add_tloc_lines(stats, s.start_row(), node.end_row());
+                    return;
+                }
+            }
+        } else {
+            return;
+        }
+        sibling = s.previous_sibling();
+    }
+}
+
+#[inline(always)]
 fn check_test_grandparent(node: &Node, stats: &mut Stats, predicate: impl Fn(&str) -> bool) {
     if let Some(text) = node.utf8_text(node.2) {
         if predicate(text) {
@@ -919,8 +937,10 @@ impl Loc for RustCode {
 
         if is_test_file(node.1) {
             add_tloc_lines(stats, start, end);
-        } else if let AttributeItem = kind_id {
-            check_test_parent(node, stats, |t| t.contains("test"));
+        } else if let FunctionItem = kind_id {
+            check_test_previous_siblings(node, stats, "attribute_item", |t| t == "#[test]");
+        } else if let ModItem = kind_id {
+            check_test_child(node, "name", stats, start, end, |n| n == "tests");
         }
 
         match kind_id {
