@@ -97,6 +97,11 @@ impl Ploc {
         self.lines.len() as f64
     }
 
+    #[inline(always)]
+    pub fn ploc_lines(&self) -> &HashSet<usize> {
+        &self.lines
+    }
+
     /// The `Ploc` metric minimum value.
     #[inline(always)]
     pub fn ploc_min(&self) -> f64 {
@@ -245,6 +250,63 @@ impl Lloc {
     }
 }
 
+/// The `Tloc` metric suite (Test Lines of Code).
+#[derive(Debug, Clone)]
+pub struct Tloc {
+    lines: HashSet<usize>,
+    tloc_min: usize,
+    tloc_max: usize,
+}
+
+impl Default for Tloc {
+    fn default() -> Self {
+        Self {
+            lines: HashSet::default(),
+            tloc_min: usize::MAX,
+            tloc_max: 0,
+        }
+    }
+}
+
+impl Tloc {
+    #[inline(always)]
+    pub fn tloc(&self) -> f64 {
+        self.lines.len() as f64
+    }
+
+    #[inline(always)]
+    pub fn tloc_lines(&self) -> &HashSet<usize> {
+        &self.lines
+    }
+
+    #[inline(always)]
+    pub fn tloc_min(&self) -> f64 {
+        self.tloc_min as f64
+    }
+
+    #[inline(always)]
+    pub fn tloc_max(&self) -> f64 {
+        self.tloc_max as f64
+    }
+
+    #[inline(always)]
+    pub fn merge(&mut self, other: &Tloc) {
+        for l in other.lines.iter() {
+            self.lines.insert(*l);
+        }
+        self.tloc_min = self.tloc_min.min(other.tloc() as usize);
+        self.tloc_max = self.tloc_max.max(other.tloc() as usize);
+    }
+
+    #[inline(always)]
+    pub(crate) fn compute_minmax(&mut self) {
+        if self.tloc_min == usize::MAX {
+            self.tloc_min = self.tloc_min.min(self.tloc() as usize);
+            self.tloc_max = self.tloc_max.max(self.tloc() as usize);
+        }
+    }
+}
+
 /// The `Loc` metric suite.
 #[derive(Debug, Clone)]
 pub struct Stats {
@@ -252,6 +314,7 @@ pub struct Stats {
     ploc: Ploc,
     cloc: Cloc,
     lloc: Lloc,
+    tloc: Tloc,
     space_count: usize,
     blank_min: usize,
     blank_max: usize,
@@ -264,6 +327,7 @@ impl Default for Stats {
             ploc: Ploc::default(),
             cloc: Cloc::default(),
             lloc: Lloc::default(),
+            tloc: Tloc::default(),
             space_count: 1,
             blank_min: usize::MAX,
             blank_max: 0,
@@ -282,6 +346,7 @@ impl Serialize for Stats {
         st.serialize_field("lloc", &self.lloc())?;
         st.serialize_field("cloc", &self.cloc())?;
         st.serialize_field("blank", &self.blank())?;
+        st.serialize_field("tloc", &self.tloc())?;
         st.serialize_field("sloc_average", &self.sloc_average())?;
         st.serialize_field("ploc_average", &self.ploc_average())?;
         st.serialize_field("lloc_average", &self.lloc_average())?;
@@ -305,12 +370,13 @@ impl fmt::Display for Stats {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "sloc: {}, ploc: {}, lloc: {}, cloc: {}, blank: {}, sloc_average: {}, ploc_average: {}, lloc_average: {}, cloc_average: {}, blank_average: {}, sloc_min: {}, sloc_max: {}, cloc_min: {}, cloc_max: {}, ploc_min: {}, ploc_max: {}, lloc_min: {}, lloc_max: {}, blank_min: {}, blank_max: {}",
+            "sloc: {}, ploc: {}, lloc: {}, cloc: {}, blank: {}, tloc: {}, sloc_average: {}, ploc_average: {}, lloc_average: {}, cloc_average: {}, blank_average: {}, sloc_min: {}, sloc_max: {}, cloc_min: {}, cloc_max: {}, ploc_min: {}, ploc_max: {}, lloc_min: {}, lloc_max: {}, blank_min: {}, blank_max: {}",
             self.sloc(),
             self.ploc(),
             self.lloc(),
             self.cloc(),
             self.blank(),
+            self.tloc(),
             self.sloc_average(),
             self.ploc_average(),
             self.lloc_average(),
@@ -337,6 +403,7 @@ impl Stats {
         self.ploc.merge(&other.ploc);
         self.cloc.merge(&other.cloc);
         self.lloc.merge(&other.lloc);
+        self.tloc.merge(&other.tloc);
 
         // Count spaces
         self.space_count += other.space_count;
@@ -385,6 +452,14 @@ impl Stats {
     #[inline(always)]
     pub fn blank(&self) -> f64 {
         self.sloc() - self.ploc() - self.cloc.only_comment_lines as f64
+    }
+
+    /// The `Tloc` metric.
+    /// 
+    /// Counts the number of test lines in a scope
+    #[inline(always)]
+    pub fn tloc(&self) -> f64 {
+        self.tloc.tloc()
     }
 
     /// The `Sloc` metric average value.
@@ -493,6 +568,7 @@ impl Stats {
         self.ploc.compute_minmax();
         self.cloc.compute_minmax();
         self.lloc.compute_minmax();
+        self.tloc.compute_minmax();
 
         if self.blank_min == usize::MAX {
             self.blank_min = self.blank_min.min(self.blank() as usize);
@@ -563,13 +639,92 @@ fn check_comment_ends_on_code_line(stats: &mut Stats, start_code_line: usize) {
     }
 }
 
+#[inline(always)]
+fn add_tloc_lines(stats: &mut Stats, start: usize, end: usize) {
+    for line in start..=end {
+        stats.tloc.lines.insert(line);
+    }
+}
+
+#[inline(always)]
+fn is_test_file(file_path: &str) -> bool {
+    let lower = file_path.to_lowercase();
+
+    lower.contains("test") || lower.contains("spec") || lower.contains("conftest") || lower.contains("mock")
+}
+
+#[inline(always)]
+fn check_test_child(node: &Node, field: &str, stats: &mut Stats, start: usize, end: usize, predicate: impl Fn(&str) -> bool) {
+    if let Some(name_node) = node.child_by_field_name(field).or_else(|| node.child(0)) {
+        if let Some(name) = name_node.utf8_text(node.2) {
+            if predicate(name) {
+                add_tloc_lines(stats, start, end);
+            }
+        }
+    }
+}
+
+#[inline(always)]
+fn check_test_node(node: &Node, stats: &mut Stats, start: usize, end: usize, predicate: impl Fn(&str) -> bool) {
+    if let Some(text) = node.utf8_text(node.2) {
+        if predicate(text) {
+            add_tloc_lines(stats, start, end);
+        }
+    }
+}
+
+#[inline(always)]
+fn check_test_parent(node: &Node, stats: &mut Stats, predicate: impl Fn(&str) -> bool) {
+    if let Some(text) = node.utf8_text(node.2) {
+        if predicate(text) {
+            if let Some(parent) = node.parent() {
+                add_tloc_lines(stats, parent.start_row(), parent.end_row());
+            }
+        }
+    }
+}
+
+#[inline(always)]
+fn check_test_grandparent(node: &Node, stats: &mut Stats, predicate: impl Fn(&str) -> bool) {
+    if let Some(text) = node.utf8_text(node.2) {
+        if predicate(text) {
+            if let Some(parent) = node.parent() {
+                if let Some(grandparent) = parent.parent() {
+                    add_tloc_lines(stats, grandparent.start_row(), grandparent.end_row());
+                }
+            }
+        }
+    }
+}
+
 impl Loc for PythonCode {
     fn compute(node: &Node, stats: &mut Stats, is_func_space: bool, is_unit: bool) {
         use Python::*;
 
         let (start, end) = init(node, stats, is_func_space, is_unit);
+        let kind_id: Python = node.kind_id().into();
 
-        match node.kind_id().into() {
+        if is_test_file(node.1) {
+            add_tloc_lines(stats, start, end);
+        } else {
+            match kind_id {
+                FunctionDefinition | ClassDefinition => check_test_child(
+                    node, "name", stats, start, end, 
+                    |n| 
+                        n.starts_with("test_") || // default for pytest/unittest
+                        n.starts_with("Test") // default for pytest/unittest
+                ),
+                // include fixtures
+                Decorator => check_test_node(
+                    node, stats, start, end, 
+                    |t| 
+                        t.contains("pytest.fixture") || 
+                        t.contains("patch")),
+                _ => {}
+            }
+        }
+
+        match &kind_id {
             StringStart | StringEnd | StringContent | Block | Module => {}
             Comment => {
                 add_cloc_lines(stats, start, end);
@@ -620,8 +775,17 @@ impl Loc for MozjsCode {
         use Mozjs::*;
 
         let (start, end) = init(node, stats, is_func_space, is_unit);
+        let kind_id: Mozjs = node.kind_id().into();
 
-        match node.kind_id().into() {
+        if is_test_file(node.1) {
+            add_tloc_lines(stats, start, end);
+        } else if let CallExpression = kind_id {
+            check_test_child(node, "function", stats, start, end, |f| {
+                matches!(f.trim(), "describe" | "it" | "test" | "beforeEach" | "afterEach" | "beforeAll" | "afterAll")
+            });
+        }
+
+        match kind_id {
             String | DQUOTE | Program => {}
             Comment => {
                 add_cloc_lines(stats, start, end);
@@ -646,8 +810,17 @@ impl Loc for JavascriptCode {
         use Javascript::*;
 
         let (start, end) = init(node, stats, is_func_space, is_unit);
+        let kind_id: Javascript = node.kind_id().into();
 
-        match node.kind_id().into() {
+        if is_test_file(node.1) {
+            add_tloc_lines(stats, start, end);
+        } else if let CallExpression = kind_id {
+            check_test_child(node, "function", stats, start, end, |f| {
+                matches!(f.trim(), "describe" | "it" | "test" | "beforeEach" | "afterEach" | "beforeAll" | "afterAll")
+            });
+        }
+
+        match &kind_id {
             String | DQUOTE | Program => {}
             Comment => {
                 add_cloc_lines(stats, start, end);
@@ -672,8 +845,17 @@ impl Loc for TypescriptCode {
         use Typescript::*;
 
         let (start, end) = init(node, stats, is_func_space, is_unit);
+        let kind_id: Typescript = node.kind_id().into();
 
-        match node.kind_id().into() {
+        if is_test_file(node.1) {
+            add_tloc_lines(stats, start, end);
+        } else if let CallExpression = kind_id {
+            check_test_child(node, "function", stats, start, end, |f| {
+                matches!(f.trim(), "describe" | "it" | "test" | "beforeEach" | "afterEach" | "beforeAll" | "afterAll")
+            });
+        }
+
+        match kind_id {
             String | DQUOTE | Program => {}
             Comment => {
                 add_cloc_lines(stats, start, end);
@@ -698,8 +880,17 @@ impl Loc for TsxCode {
         use Tsx::*;
 
         let (start, end) = init(node, stats, is_func_space, is_unit);
+        let kind_id: Tsx = node.kind_id().into();
 
-        match node.kind_id().into() {
+        if is_test_file(node.1) {
+            add_tloc_lines(stats, start, end);
+        } else if let CallExpression = kind_id {
+            check_test_child(node, "function", stats, start, end, |f| {
+                matches!(f.trim(), "describe" | "it" | "test" | "beforeEach" | "afterEach" | "beforeAll" | "afterAll")
+            });
+        }
+
+        match kind_id {
             String | DQUOTE | Program => {}
             Comment => {
                 add_cloc_lines(stats, start, end);
@@ -724,8 +915,15 @@ impl Loc for RustCode {
         use Rust::*;
 
         let (start, end) = init(node, stats, is_func_space, is_unit);
+        let kind_id: Rust = node.kind_id().into();
 
-        match node.kind_id().into() {
+        if is_test_file(node.1) {
+            add_tloc_lines(stats, start, end);
+        } else if let AttributeItem = kind_id {
+            check_test_parent(node, stats, |t| t.contains("test"));
+        }
+
+        match kind_id {
             StringLiteral
             | RawStringLiteral
             | Block
@@ -774,8 +972,24 @@ impl Loc for CppCode {
         use Cpp::*;
 
         let (start, end) = init(node, stats, is_func_space, is_unit);
+        let kind_id: Cpp = node.kind_id().into();
 
-        match node.kind_id().into() {
+        if is_test_file(node.1) {
+            add_tloc_lines(stats, start, end);
+        } else {
+            match kind_id {
+                FunctionDefinition => {
+                    check_test_child(node, "", stats, start, end, |text| {
+                        text.starts_with("TEST") || // gtest
+                        text.starts_with("TEST_CASE") || // catch2
+                        text.starts_with("test") // general heuristic
+                    });
+                }
+                _ => {}
+            }
+        }
+
+        match kind_id {
             RawStringLiteral | StringLiteral | DeclarationList | FieldDeclarationList
             | TranslationUnit => {}
             Comment => {
@@ -824,6 +1038,20 @@ impl Loc for JavaCode {
 
         let (start, end) = init(node, stats, is_func_space, is_unit);
         let kind_id: Java = node.kind_id().into();
+
+        if is_test_file(node.1) {
+            add_tloc_lines(stats, start, end);
+        } else {
+            match kind_id {
+                MarkerAnnotation | Annotation => {
+                    check_test_grandparent(node, stats, |t| {
+                        t.contains("Test") || t.contains("Before") || t.contains("After")
+                    });
+                }
+                _ => {}
+            }
+        }
+
         // LLOC in Java is counted for statements only
         // https://docs.oracle.com/javase/tutorial/java/nutsandbolts/expressions.html
         match kind_id {
@@ -862,7 +1090,18 @@ impl Loc for GoCode {
         use crate::Go::*;
 
         let (start, end) = init(node, stats, is_func_space, is_unit);
-        match node.kind_id().into() {
+        let kind_id = node.kind_id().into();
+
+        if is_test_file(node.1) {
+            add_tloc_lines(stats, start, end);
+        } else if let FunctionDeclaration = kind_id {
+            check_test_child(node, "name", stats, start, end, |n| {
+                n.starts_with("Test") || n.starts_with("Benchmark") || 
+                n.starts_with("Fuzz")
+            });
+        }
+
+        match kind_id {
             SourceFile => {}
             Comment => {
                 add_cloc_lines(stats, start, end);
@@ -904,8 +1143,27 @@ impl Loc for HaskellCode {
         use crate::Haskell::*;
 
         let (start, end) = init(node, stats, is_func_space, is_unit);
+        let kind_id = node.kind_id().into();
 
-        match node.kind_id().into() {
+        if is_test_file(node.1) {
+            add_tloc_lines(stats, start, end);
+        } else {
+            match kind_id {
+                Infix => {
+                    check_test_child(node, "contructor", stats, start, end, |name| {
+                        matches!(name, "TestCase" | "hspec")
+                    });
+                }
+                Apply | Apply2 | Apply3 | Apply4 => {
+                    check_test_child(node, "function", stats, start, end, |f| {
+                        matches!(f, "describe" | "it" | "testGroup" | "testCase" | "testProperty")
+                    });
+                }
+                _ => {}
+            }
+        }
+
+        match kind_id {
             // Root node and strings don't act as ploc/lloc directly
             Haskell | String => {}
 
@@ -938,8 +1196,21 @@ impl Loc for SwiftCode {
         use crate::Swift::*;
 
         let (start, end) = init(node, stats, is_func_space, is_unit);
+        let kind_id = node.kind_id().into();
 
-        match node.kind_id().into() {
+        if is_test_file(node.1) {
+            add_tloc_lines(stats, start, end);
+        } else {
+            match kind_id {
+                FunctionDeclaration | FunctionDeclaration2 => check_test_child(node, "name", stats, start, end, |n| n.starts_with("test")),
+                ClassDeclaration | ClassDeclaration2 => check_test_child(node, "name", stats, start, end, |n| n.ends_with("Tests") || n.ends_with("Spec")),
+                Attribute => check_test_grandparent(node, stats, |t| t.contains("Test") || t.contains("Suite")),
+                UserType => check_test_parent(node, stats, |t| t.contains("XCTestCase")),
+                _ => {}
+            }
+        }
+
+        match kind_id {
             // Root nodes and string boundaries/content do not directly add to LLOC/PLOC
             SourceFile
             | StringLiteral
@@ -1003,8 +1274,26 @@ impl Loc for ScalaCode {
         use crate::Scala::*;
 
         let (start, end) = init(node, stats, is_func_space, is_unit);
+        let kind_id: Scala = node.kind_id().into();
 
-        match node.kind_id().into() {
+        if is_test_file(node.1) {
+            add_tloc_lines(stats, start, end);
+        } else {
+            match kind_id {
+                CallExpression => {
+                    check_test_child(node, "function", stats, start, end, |f| {
+                        matches!(f, "test" | "property" | "describe" | "it" | "ignore")
+                    });
+                }
+                Annotation => check_test_parent(node, stats, |t| t.contains("Test")),
+                ClassDefinition | ObjectDefinition => {
+                    check_test_child(node, "name", stats, start, end, |n| n.ends_with("Test") || n.ends_with("Suite") || n.ends_with("Spec"));
+                }
+                _ => {}
+            }
+        }
+
+        match kind_id {
             // Root nodes and strings do not directly add to LLOC/PLOC
             CompilationUnit | String | InterpolatedString | InterpolatedString2 => {}
 
@@ -3658,6 +3947,54 @@ mod tests {
                       "ploc": 7.0,
                       "lloc": 2.0,
                       "cloc": 6.0,
+                      "blank": 1.0,
+                      "sloc_average": 4.0,
+                      "ploc_average": 2.3333333333333335,
+                      "lloc_average": 0.6666666666666666,
+                      "cloc_average": 2.0,
+                      "blank_average": 0.3333333333333333,
+                      "sloc_min": 6.0,
+                      "sloc_max": 6.0,
+                      "cloc_min": 2.0,
+                      "cloc_max": 2.0,
+                      "ploc_min": 6.0,
+                      "ploc_max": 6.0,
+                      "lloc_min": 2.0,
+                      "lloc_max": 2.0,
+                      "blank_min": 0.0,
+                      "blank_max": 0.0
+                    }"###
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn scala_main_class_loc() {
+        check_metrics::<ScalaParser>(
+            "package com.company
+            /**
+             * The HelloWorldApp object implements an application that
+             * simply prints \"Hello World!\" to standard output.
+             */
+
+            object HelloWorldApp {
+            def main(args: Array[String]): Unit = {
+                val message = if (args.isEmpty) \"Hello empty world\" else \"Hello world\"
+                println(message) // Display the string.
+            }
+            }",
+            "foo.scala",
+            |metric| {
+                // Spaces: 3
+                insta::assert_json_snapshot!(
+                    metric.loc,
+                    @r###"
+                    {
+                      "sloc": 12.0,
+                      "ploc": 7.0,
+                      "lloc": 2.0,
+                      "cloc": 5.0,
                       "blank": 1.0,
                       "sloc_average": 4.0,
                       "ploc_average": 2.3333333333333335,

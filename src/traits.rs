@@ -19,7 +19,7 @@ use crate::npa::Npa;
 use crate::npm::Npm;
 use crate::parser::Filter;
 use crate::preproc::PreprocResults;
-use crate::safecheck::SafeCheck;
+use crate::thesis::Thesis;
 use crate::wmc::Wmc;
 
 /// A trait for callback functions.
@@ -59,7 +59,7 @@ pub trait ParserTrait {
     type Abc: Abc;
     type Npm: Npm;
     type Npa: Npa;
-    type SafeCheck: SafeCheck;
+    type Thesis: Thesis;
 
     fn new(code: Vec<u8>, path: &Path, pr: Option<Arc<PreprocResults>>) -> Self;
     fn get_language(&self) -> LANG;

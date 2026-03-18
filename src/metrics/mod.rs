@@ -9,5 +9,5 @@ pub mod nargs;
 pub mod nom;
 pub mod npa;
 pub mod npm;
-pub mod safecheck;
+pub mod thesis;
 pub mod wmc;

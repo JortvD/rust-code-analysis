@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use tree_sitter::Node as OtherNode;
 use tree_sitter::Tree as OtherTree;
 use tree_sitter::{Parser, TreeCursor};
@@ -6,20 +8,21 @@ use crate::checker::Checker;
 use crate::traits::{LanguageInfo, Search};
 
 #[derive(Clone, Debug)]
-pub(crate) struct Tree(OtherTree);
+pub(crate) struct Tree(OtherTree, String, Vec<u8>);
 
 impl Tree {
-    pub(crate) fn new<T: LanguageInfo>(code: &[u8]) -> Self {
+    pub(crate) fn new<T: LanguageInfo>(code: &[u8], path: &Path) -> Self {
         let mut parser = Parser::new();
         parser
             .set_language(&T::get_lang().get_ts_language())
             .unwrap();
 
-        Self(parser.parse(code, None).unwrap())
+        let path_str = path.to_string_lossy().into_owned();
+        Self(parser.parse(code, None).unwrap(), path_str, code.to_vec())
     }
 
     pub(crate) fn get_root(&self) -> Node<'_> {
-        Node(self.0.root_node())
+        Node(self.0.root_node(), &self.1, &self.2)
     }
 }
 
@@ -28,7 +31,7 @@ impl Tree {
 /// The inner `tree_sitter::Node` is exposed for advanced use cases
 /// where direct access to the underlying tree-sitter API is needed.
 #[derive(Clone, Copy, Debug)]
-pub struct Node<'a>(pub OtherNode<'a>);
+pub struct Node<'a>(pub OtherNode<'a>, pub &'a str, pub &'a [u8]);
 
 impl<'a> Node<'a> {
     /// Checks if a node represents a syntax error or contains any syntax errors
@@ -80,7 +83,7 @@ impl<'a> Node<'a> {
     }
 
     pub(crate) fn parent(&self) -> Option<Node<'a>> {
-        self.0.parent().map(Node)
+        self.0.parent().map(|n| Node(n, self.1, self.2))
     }
 
     #[inline(always)]
@@ -93,11 +96,11 @@ impl<'a> Node<'a> {
     }
 
     pub(crate) fn previous_sibling(&self) -> Option<Node<'a>> {
-        self.0.prev_sibling().map(Node)
+        self.0.prev_sibling().map(|n| Node(n, self.1, self.2))
     }
 
     pub(crate) fn next_sibling(&self) -> Option<Node<'a>> {
-        self.0.next_sibling().map(Node)
+        self.0.next_sibling().map(|n| Node(n, self.1, self.2))
     }
 
     #[inline(always)]
@@ -112,11 +115,11 @@ impl<'a> Node<'a> {
     }
 
     pub(crate) fn child_by_field_name(&self, name: &str) -> Option<Node<'_>> {
-        self.0.child_by_field_name(name).map(Node)
+        self.0.child_by_field_name(name).map(|n| Node(n, self.1, self.2))
     }
 
     pub(crate) fn child(&self, pos: usize) -> Option<Node<'a>> {
-        self.0.child(pos).map(Node)
+        self.0.child(pos).map(|n| Node(n, self.1, self.2))
     }
 
     pub(crate) fn children(&self) -> impl ExactSizeIterator<Item = Node<'a>> + use<'a> {
@@ -130,7 +133,7 @@ impl<'a> Node<'a> {
     }
 
     pub(crate) fn cursor(&self) -> Cursor<'a> {
-        Cursor(self.0.walk())
+        Cursor(self.0.walk(), self.1, self.2)
     }
 
     #[allow(dead_code)]
@@ -187,7 +190,7 @@ impl<'a> Node<'a> {
 
 /// An `AST` cursor.
 #[derive(Clone)]
-pub struct Cursor<'a>(TreeCursor<'a>);
+pub struct Cursor<'a>(TreeCursor<'a>, &'a str, &'a [u8]);
 
 impl<'a> Cursor<'a> {
     pub(crate) fn reset(&mut self, node: &Node<'a>) {
@@ -203,7 +206,7 @@ impl<'a> Cursor<'a> {
     }
 
     pub(crate) fn node(&self) -> Node<'a> {
-        Node(self.0.node())
+        Node(self.0.node(), self.1, self.2)
     }
 }
 

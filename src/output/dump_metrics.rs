@@ -12,6 +12,7 @@ use crate::nargs;
 use crate::nom;
 use crate::npa;
 use crate::npm;
+use crate::thesis;
 use crate::wmc;
 
 use crate::spaces::{CodeMetrics, FuncSpace};
@@ -103,6 +104,7 @@ fn dump_metrics(
     writeln!(stdout, "metrics")?;
 
     let prefix = format!("{prefix}{pref_child}");
+    dump_thesis(&metrics.thesis, &prefix, false, stdout)?;
     dump_cognitive(&metrics.cognitive, &prefix, false, stdout)?;
     dump_cyclomatic(&metrics.cyclomatic, &prefix, false, stdout)?;
     dump_nargs(&metrics.nargs, &prefix, false, stdout)?;
@@ -115,6 +117,25 @@ fn dump_metrics(
     dump_wmc(&metrics.wmc, &prefix, false, stdout)?;
     dump_npm(&metrics.npm, &prefix, false, stdout)?;
     dump_npa(&metrics.npa, &prefix, true, stdout)
+}
+
+fn dump_thesis(
+    stats: &thesis::Stats,
+    prefix: &str,
+    last: bool,
+    stdout: &mut StandardStreamLock,
+) -> std::io::Result<()> {
+    let pref = if last { "`- " } else { "|- " };
+
+    color(stdout, Color::Blue)?;
+    write!(stdout, "{prefix}{pref}")?;
+
+    intense_color(stdout, Color::Green)?;
+    writeln!(stdout, "thesis")?;
+
+    let prefix = format!("{prefix}   ");
+    dump_value("assertions", stats.assertions(), &prefix, false, stdout)?;
+    dump_value("unsafe lines", stats.unsafe_lines().len() as f64, &prefix, true, stdout)
 }
 
 fn dump_cognitive(
@@ -215,6 +236,7 @@ fn dump_loc(
     dump_value("ploc", stats.ploc(), &prefix, false, stdout)?;
     dump_value("lloc", stats.lloc(), &prefix, false, stdout)?;
     dump_value("cloc", stats.cloc(), &prefix, false, stdout)?;
+    dump_value("tloc", stats.tloc(), &prefix, false, stdout)?;
     dump_value("blank", stats.blank(), &prefix, true, stdout)
 }
 

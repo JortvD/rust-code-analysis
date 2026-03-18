@@ -14,7 +14,7 @@ use crate::nargs::NArgs;
 use crate::nom::Nom;
 use crate::npa::Npa;
 use crate::npm::Npm;
-use crate::safecheck::SafeCheck;
+use crate::thesis::Thesis;
 use crate::wmc::Wmc;
 
 use crate::alterator::Alterator;
@@ -27,7 +27,7 @@ use crate::preproc::{PreprocResults, get_macros};
 use crate::traits::*;
 
 #[derive(Debug)]
-pub struct Parser<
+pub struct Parser< 
     T: LanguageInfo
         + Alterator
         + Checker
@@ -44,7 +44,7 @@ pub struct Parser<
         + Npa
         + Npm
         + Wmc
-        + SafeCheck,
+        + Thesis,
 > {
     code: Vec<u8>,
     tree: Tree,
@@ -114,7 +114,7 @@ impl<
         + Npa
         + Npm
         + Wmc
-        + SafeCheck,
+        + Thesis,
 > ParserTrait for Parser<T>
 {
     type Checker = T;
@@ -131,7 +131,7 @@ impl<
     type Abc = T;
     type Npm = T;
     type Npa = T;
-    type SafeCheck = T;
+    type Thesis = T;
     fn new(code: Vec<u8>, path: &Path, pr: Option<Arc<PreprocResults>>) -> Self {
         let fake_code = get_fake_code::<T>(&code, path, pr);
         let code = if let Some(fake) = fake_code {
@@ -140,7 +140,7 @@ impl<
             code
         };
 
-        let tree = Tree::new::<T>(&code);
+        let tree = Tree::new::<T>(&code, path);
 
         Self {
             code,
